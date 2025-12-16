@@ -291,19 +291,22 @@ function openProject(project) {
     increaseFrequency(key)
   }
   
+  // Cursor 可执行文件路径 (新版本)
+  const cursorExe = '"C:\\Program Files\\cursor\\Cursor.exe"'
+  
   // 根据类型构建命令
   switch (parsed.type) {
     case 'wsl':
-      cmd = `cursor --remote wsl+${parsed.distro} "${parsed.path}"`
+      cmd = `${cursorExe} --remote wsl+${parsed.distro} "${parsed.path}"`
       break
     case 'ssh':
-      cmd = `cursor --remote ssh-remote+${parsed.host} "${parsed.path}"`
+      cmd = `${cursorExe} --remote ssh-remote+${parsed.host} "${parsed.path}"`
       break
     case 'local':
-      cmd = `cursor "${parsed.path}"`
+      cmd = `${cursorExe} "${parsed.path}"`
       break
     default:
-      cmd = `cursor "${parsed.path}"`
+      cmd = `${cursorExe} "${parsed.path}"`
   }
   
   if (cmd) {
@@ -328,59 +331,37 @@ if (result.error) {
   if (projects.length === 0) {
     quickcommand.showMessageBox('没有找到最近打开的项目', 'info')
   } else {
-    // 构建列表项: 名称 | [来源标签] + 路径，并记录原始索引
+    // 构建列表项: 名称 | [来源标签] + 路径
     const items = projects.map((p, idx) => ({
       title: `${p.name} ｜ ${p.sourceTag}`,
       description: p.parsed.displayPath,
-      idx  // 保存原始索引
+      idx
     }))
     
-    // 自定义搜索函数
-    const searchHandler = (action, query) => {
-      if (action === 'search') {
-        // 模糊匹配：空格分隔的关键词需全部匹配
-        const keywords = (query || '').toLowerCase().split(/\s+/).filter(k => k)
-        
-        if (keywords.length === 0) {
-          return items
-        }
-        
-        return items.filter(item => {
-          const searchText = `${item.title} ${item.description}`.toLowerCase()
-          return keywords.every(kw => searchText.includes(kw))
-        })
-      }
-      return items
-    }
-    
-    quickcommand.showSelectList(searchHandler, {
-      placeholder: '搜索项目 (空格分隔多关键词) 🐧WSL 🌐SSH 💻本地',
+    quickcommand.showSelectList(items, {
+      placeholder: '搜索 Cursor 最近项目...',
       optionType: 'json'
     }).then(selected => {
-      if (selected !== undefined && selected !== null) {
-        let projectIdx = -1
-        
-        if (typeof selected === 'number') {
-          // 如果返回的是过滤后列表的索引，需要找原始项
-          projectIdx = selected
-        } else if (selected.idx !== undefined) {
-          // 通过保存的原始索引找到项目
-          projectIdx = selected.idx
-        } else if (selected.id !== undefined) {
-          projectIdx = selected.id
-        } else if (selected.title) {
-          // 根据 title 查找原始索引
-          const found = items.find(item => item.title === selected.title)
-          if (found) projectIdx = found.idx
-        }
-        
-        if (projectIdx >= 0 && projectIdx < projects.length) {
-          const project = projects[projectIdx]
-          openProject(project)
-          utools.showNotification(`正在打开: ${project.name}`)
-        }
+      if (selected === undefined || selected === null) return
+      
+      let projectIdx = -1
+      
+      if (selected.idx !== undefined) {
+        projectIdx = selected.idx
+      } else if (typeof selected === 'number') {
+        projectIdx = selected
+      } else if (selected.id !== undefined) {
+        projectIdx = selected.id
+      } else if (selected.title) {
+        const found = items.find(item => item.title === selected.title)
+        if (found) projectIdx = found.idx
+      }
+      
+      if (projectIdx >= 0 && projectIdx < projects.length) {
+        const project = projects[projectIdx]
+        openProject(project)
+        utools.showNotification(`正在打开: ${project.name}`)
       }
     })
   }
 }
-
