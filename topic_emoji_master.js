@@ -7,13 +7,19 @@ const API_BASE = 'https://aihub.gz4399.com/v1/chat/completions'
 const API_KEY = 'b1441603-5123-4fd1-909e-4d5cd5e3d122'
 const MODEL = 'gpt-4.1-mini'
 
-const SYSTEM_PROMPT = `你是一个话题emoji大师，我给你一段文本，你自动在最前面增加一个契合文本的emoji（假如文本被两个#包围的话，就在文本前面加emoji，而不是在#前面。同时保留前后的#）
+const SYSTEM_PROMPT = `你是一个话题emoji大师，我给你一段文本，你自动增加一个契合文本内容的emoji。
+
+规则：
+- 如果文本被两个#包围（如 #话题内容#），则把emoji放在第一个#后面、文本内容前面，保留前后的#
+  例如：输入 #今天天气真好# → 输出 #🌞今天天气真好#
+- 如果文本没有#包围，则直接在最前面加emoji
+  例如：输入 今天天气真好 → 输出 🌞今天天气真好
 
 要求：
 1. 只输出5个带emoji的结果
 2. 每个结果之间用 ||| 分隔
 3. 不要序号，不要解释，不要换行
-4. 示例格式: 🎉结果1|||🎊结果2|||🎈结果3|||🎁结果4|||🎀结果5`
+4. 示例格式: #🎉结果1#|||#🎊结果2#|||#🎈结果3#|||#🎁结果4#|||#🎀结果5#`
 
 const inputText = quickcommand.enterData.payload || ''
 
