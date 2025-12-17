@@ -3,8 +3,6 @@
 // 新建命令时：环境选 quickcommand，输出选【显示html】
 // =====================================================
 
-const https = require('https')
-
 const API_KEY = 'b1441603-5123-4fd1-909e-4d5cd5e3d122'
 const MODEL = 'gpt-5.1'
 
@@ -33,225 +31,147 @@ const SYSTEM_PROMPT = `你是一个内容优化专家，帮助用户润色文字
 5. 版本3：口语自然版（像聊天一样自然）
 6. 直接输出优化后的内容，不要标注版本名称，不要解释`
 
-// ==================== 获取输入内容 ====================
+// 获取输入
 let inputText = ''
-
 if (quickcommand.enterData) {
-  if (quickcommand.enterData.payload) {
-    inputText = quickcommand.enterData.payload
-  } else if (quickcommand.enterData.text) {
-    inputText = quickcommand.enterData.text
-  }
+  inputText = quickcommand.enterData.payload || quickcommand.enterData.text || ''
 }
 
-// 转义HTML特殊字符
-const escapeHtml = (str) => {
+// 转义
+const escapeForJs = (str) => {
   return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+    .replace(/\$/g, '\\$')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
 }
 
-// 生成结果 HTML
-function getResultHtml(originalText, items) {
-  const cardData = [
-    { icon: '📝', title: '简洁精炼版', badge: '精简', color: '#22c55e' },
-    { icon: '💼', title: '专业增强版', badge: '正式', color: '#3b82f6' },
-    { icon: '💬', title: '口语自然版', badge: '自然', color: '#f59e0b' }
-  ]
-  
-  let cardsHtml = ''
-  items.forEach((text, index) => {
-    const card = cardData[index] || { icon: '✨', title: `版本${index+1}`, badge: '', color: '#8b5cf6' }
-    const textId = `text_${index}`
-    cardsHtml += `
-      <div class="card">
-        <div class="card-header">
-          <span class="card-icon">${card.icon}</span>
-          <span class="card-title">${card.title}</span>
-          <span class="card-badge" style="background: ${card.color}22; color: ${card.color}">${card.badge}</span>
-          <button class="copy-btn" onclick="copyText('${textId}', this)">复制</button>
-        </div>
-        <div class="card-content" id="${textId}">${escapeHtml(text)}</div>
-      </div>
-    `
-  })
-  
-  return `
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; padding: 16px; background: #f5f5f5; }
-  
-  .original {
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 16px;
-    font-size: 13px;
-  }
-  .original-label { font-size: 11px; color: #999; margin-bottom: 6px; }
-  .original-text {
-    color: #666;
-    line-height: 1.6;
-    max-height: 80px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  
-  .card {
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 10px;
-    margin-bottom: 12px;
-    overflow: hidden;
-  }
-  .card-header {
-    display: flex;
-    align-items: center;
-    padding: 10px 14px;
-    border-bottom: 1px solid #f0f0f0;
-    background: #fafafa;
-  }
-  .card-icon { font-size: 16px; margin-right: 8px; }
-  .card-title { font-size: 13px; font-weight: 600; color: #333; }
-  .card-badge {
-    margin-left: 8px;
-    font-size: 10px;
-    padding: 2px 8px;
-    border-radius: 10px;
-  }
-  .copy-btn {
-    margin-left: auto;
-    background: #2196F3;
-    color: #fff;
-    border: none;
-    padding: 5px 12px;
-    border-radius: 4px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .copy-btn:hover { background: #1976D2; }
-  .copy-btn.copied { background: #4CAF50; }
-  
-  .card-content {
-    padding: 14px 16px;
-    font-size: 14px;
-    line-height: 1.8;
-    color: #333;
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 200px;
-    overflow-y: auto;
-  }
-  
-  .toast {
-    position: fixed;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-100px);
-    background: #333;
-    color: #fff;
-    padding: 8px 20px;
-    border-radius: 4px;
-    font-size: 13px;
-    transition: transform 0.3s;
-    z-index: 999;
-  }
-  .toast.show { transform: translateX(-50%) translateY(0); }
-</style>
-
-<div class="original">
-  <div class="original-label">📄 原文</div>
-  <div class="original-text">${escapeHtml(originalText)}</div>
-</div>
-
-${cardsHtml}
-
-<div class="toast" id="toast">✓ 已复制</div>
-
-<script>
-function copyText(id, btn) {
-  const text = document.getElementById(id).innerText;
-  utools.copyText(text);
-  
-  btn.textContent = '已复制';
-  btn.classList.add('copied');
-  
-  const toast = document.getElementById('toast');
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 1500);
-  
-  setTimeout(() => {
-    btn.textContent = '复制';
-    btn.classList.remove('copied');
-  }, 2000);
-}
-</script>`
-}
-
-// ==================== 主逻辑 ====================
 if (!inputText || !inputText.trim()) {
   quickcommand.showMessageBox('请先选中要优化的文本，再触发此命令', 'info')
 } else {
-  // 使用 Promise 处理异步请求
-  new Promise((resolve, reject) => {
-    const postData = JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: inputText.trim() }
-      ],
-      temperature: 0.8
-    })
+  const html = `
+<style>
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-8px); } }
+</style>
 
-    const options = {
-      hostname: 'aihub.gz4399.com',
-      path: '/v1/chat/completions',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    }
+<div style="padding:12px;min-height:500px;">
+  <div style="background:#f9f9f9;border:1px solid #eee;border-radius:6px;padding:10px;margin-bottom:12px;">
+    <div style="font-size:11px;color:#888;margin-bottom:4px;">📄 原文</div>
+    <div id="originalText" style="font-size:13px;color:#666;line-height:1.5;"></div>
+  </div>
+  
+  <div id="loading" style="text-align:center;padding:40px 20px;">
+    <div style="display:inline-flex;gap:6px;margin-bottom:16px;">
+      <div style="width:12px;height:12px;background:#f59e0b;border-radius:50%;animation:bounce 1s infinite;"></div>
+      <div style="width:12px;height:12px;background:#3b82f6;border-radius:50%;animation:bounce 1s infinite 0.1s;"></div>
+      <div style="width:12px;height:12px;background:#22c55e;border-radius:50%;animation:bounce 1s infinite 0.2s;"></div>
+    </div>
+    <div style="color:#666;font-size:14px;">✨ AI 正在优化内容...</div>
+    <div style="color:#999;font-size:12px;margin-top:8px;">请稍候，大约需要几秒钟</div>
+  </div>
+  
+  <div id="results" style="display:none;"></div>
+  <div id="error" style="display:none;color:#ef4444;text-align:center;padding:30px;font-size:14px;"></div>
+</div>
 
-    quickcommand.showMessageBox('正在优化内容...', 'info')
+<script>
+const API_KEY = '${API_KEY}';
+const MODEL = '${MODEL}';
+const SYSTEM_PROMPT = \`${escapeForJs(SYSTEM_PROMPT)}\`;
+const inputText = \`${escapeForJs(inputText.trim())}\`;
 
-    const req = https.request(options, (res) => {
-      let data = ''
-      res.on('data', chunk => { data += chunk })
-      res.on('end', () => {
-        if (res.statusCode !== 200) {
-          reject(new Error(`请求失败 [${res.statusCode}]`))
-          return
-        }
-        try {
-          const json = JSON.parse(data)
-          const content = json.choices[0].message.content.trim()
-          const items = content.split('|||').map(s => s.trim()).filter(s => s)
-          
-          if (items.length > 0) {
-            resolve(items)
-          } else {
-            reject(new Error('未获取到优化结果'))
-          }
-        } catch (e) {
-          reject(new Error(`解析失败: ${e.message}`))
-        }
-      })
-    })
+document.getElementById('originalText').textContent = inputText;
 
-    req.on('error', (e) => reject(new Error(`网络错误: ${e.message}`)))
-    req.write(postData)
-    req.end()
-  }).then(items => {
-    // 输出 HTML
-    console.log(getResultHtml(inputText.trim(), items))
-  }).catch(err => {
-    quickcommand.showMessageBox(err.message, 'error')
+const cards = [
+  { icon: '📝', title: '简洁精炼版', color: '#22c55e' },
+  { icon: '💼', title: '专业增强版', color: '#3b82f6' },
+  { icon: '💬', title: '口语自然版', color: '#f59e0b' }
+];
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\n/g,'<br>');
+}
+
+function copyText(text, btn) {
+  if (typeof utools !== 'undefined') {
+    utools.copyText(text);
+    utools.showNotification('已复制');
+  }
+  btn.textContent = '已复制';
+  btn.style.background = '#22c55e';
+  setTimeout(() => { btn.textContent = '复制'; btn.style.background = cards[0].color; }, 1500);
+}
+
+function showResults(items) {
+  document.getElementById('loading').style.display = 'none';
+  const container = document.getElementById('results');
+  container.style.display = 'block';
+  
+  items.forEach((text, i) => {
+    const c = cards[i] || { icon: '✨', title: '版本'+(i+1), color: '#8b5cf6' };
+    const div = document.createElement('div');
+    div.style.cssText = 'background:#fff;border:1px solid #ddd;border-radius:8px;margin-bottom:12px;overflow:hidden;';
+    
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;padding:8px 12px;background:#f5f5f5;border-bottom:1px solid #eee;';
+    header.innerHTML = '<span style="margin-right:6px;">' + c.icon + '</span><b style="color:#333;font-size:13px;">' + c.title + '</b>';
+    
+    const btn = document.createElement('button');
+    btn.textContent = '复制';
+    btn.style.cssText = 'margin-left:auto;background:' + c.color + ';color:#fff;border:none;padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer;';
+    btn.onclick = function() { copyText(text, this); };
+    header.appendChild(btn);
+    
+    const content = document.createElement('div');
+    content.style.cssText = 'padding:12px;font-size:14px;line-height:1.7;color:#333;';
+    content.innerHTML = escapeHtml(text);
+    
+    div.appendChild(header);
+    div.appendChild(content);
+    container.appendChild(div);
+  });
+}
+
+function showError(msg) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('error').style.display = 'block';
+  document.getElementById('error').textContent = '❌ ' + msg;
+}
+
+// 发起请求
+fetch('https://aihub.gz4399.com/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + API_KEY
+  },
+  body: JSON.stringify({
+    model: MODEL,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: inputText }
+    ],
+    temperature: 0.8
   })
+})
+.then(res => {
+  if (!res.ok) throw new Error('请求失败 [' + res.status + ']');
+  return res.json();
+})
+.then(data => {
+  const content = data.choices[0].message.content.trim();
+  const items = content.split('|||').map(s => s.trim()).filter(s => s);
+  if (items.length > 0) {
+    showResults(items);
+  } else {
+    showError('未获取到优化结果');
+  }
+})
+.catch(err => showError(err.message));
+</script>
+`
+  console.log(html)
 }
