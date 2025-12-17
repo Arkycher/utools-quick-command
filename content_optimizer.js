@@ -52,87 +52,326 @@ if (!inputText || !inputText.trim()) {
 } else {
   const html = `
 <style>
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f5f5; }
+  
   @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-8px); } }
+  
+  .container { padding: 12px; min-height: 500px; }
+  
+  /* Tab 样式 */
+  .tabs { display: flex; border-bottom: 2px solid #e5e5e5; margin-bottom: 12px; }
+  .tab {
+    padding: 10px 16px;
+    font-size: 13px;
+    color: #666;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tab:hover { color: #333; }
+  .tab.active { color: #3b82f6; border-bottom-color: #3b82f6; font-weight: 600; }
+  .tab .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  
+  /* 对比区域 */
+  .compare-container { display: flex; gap: 12px; }
+  .compare-side {
+    flex: 1;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .compare-header {
+    padding: 10px 14px;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .compare-title { font-size: 13px; font-weight: 600; color: #333; }
+  .compare-stats { font-size: 11px; color: #888; }
+  .compare-stats .change { margin-left: 6px; font-weight: 600; }
+  .compare-stats .change.decrease { color: #22c55e; }
+  .compare-stats .change.increase { color: #f59e0b; }
+  .compare-content {
+    padding: 14px;
+    font-size: 14px;
+    line-height: 1.8;
+    color: #333;
+    flex: 1;
+    overflow-y: auto;
+    max-height: 350px;
+  }
+  
+  /* 差异高亮 */
+  .diff-add { background: #dcfce7; color: #166534; padding: 1px 2px; border-radius: 2px; }
+  .diff-del { background: #fee2e2; color: #991b1b; text-decoration: line-through; padding: 1px 2px; border-radius: 2px; }
+  
+  /* 复制按钮 */
+  .copy-btn {
+    background: #3b82f6;
+    color: #fff;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .copy-btn:hover { background: #2563eb; }
+  .copy-btn.copied { background: #22c55e; }
+  
+  /* Loading */
+  .loading {
+    text-align: center;
+    padding: 60px 20px;
+  }
+  .loading-dots {
+    display: inline-flex;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .loading-dots span {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    animation: bounce 1s infinite;
+  }
+  .loading-dots span:nth-child(1) { background: #f59e0b; }
+  .loading-dots span:nth-child(2) { background: #3b82f6; animation-delay: 0.1s; }
+  .loading-dots span:nth-child(3) { background: #22c55e; animation-delay: 0.2s; }
+  .loading-text { color: #666; font-size: 14px; }
+  .loading-hint { color: #999; font-size: 12px; margin-top: 8px; }
+  
+  .error { color: #ef4444; text-align: center; padding: 40px; font-size: 14px; }
+  .results { display: none; }
 </style>
 
-<div style="padding:12px;min-height:500px;">
-  <div style="background:#f9f9f9;border:1px solid #eee;border-radius:6px;padding:10px;margin-bottom:12px;">
-    <div style="font-size:11px;color:#888;margin-bottom:4px;">📄 原文</div>
-    <div id="originalText" style="font-size:13px;color:#666;line-height:1.5;"></div>
+<div class="container">
+  <div id="loading" class="loading">
+    <div class="loading-dots"><span></span><span></span><span></span></div>
+    <div class="loading-text">✨ AI 正在优化内容...</div>
+    <div class="loading-hint">请稍候，大约需要几秒钟</div>
   </div>
   
-  <div id="loading" style="text-align:center;padding:40px 20px;">
-    <div style="display:inline-flex;gap:6px;margin-bottom:16px;">
-      <div style="width:12px;height:12px;background:#f59e0b;border-radius:50%;animation:bounce 1s infinite;"></div>
-      <div style="width:12px;height:12px;background:#3b82f6;border-radius:50%;animation:bounce 1s infinite 0.1s;"></div>
-      <div style="width:12px;height:12px;background:#22c55e;border-radius:50%;animation:bounce 1s infinite 0.2s;"></div>
+  <div id="results" class="results">
+    <div class="tabs" id="tabs"></div>
+    <div class="compare-container">
+      <div class="compare-side">
+        <div class="compare-header">
+          <span class="compare-title">📄 原文</span>
+          <span class="compare-stats" id="originalStats"></span>
+        </div>
+        <div class="compare-content" id="originalContent"></div>
+      </div>
+      <div class="compare-side">
+        <div class="compare-header">
+          <span class="compare-title" id="optimizedTitle">✨ 优化版本</span>
+          <span class="compare-stats" id="optimizedStats"></span>
+          <button class="copy-btn" id="copyBtn" onclick="copyCurrentVersion()">复制</button>
+        </div>
+        <div class="compare-content" id="optimizedContent"></div>
+      </div>
     </div>
-    <div style="color:#666;font-size:14px;">✨ AI 正在优化内容...</div>
-    <div style="color:#999;font-size:12px;margin-top:8px;">请稍候，大约需要几秒钟</div>
   </div>
   
-  <div id="results" style="display:none;"></div>
-  <div id="error" style="display:none;color:#ef4444;text-align:center;padding:30px;font-size:14px;"></div>
+  <div id="error" class="error" style="display:none;"></div>
 </div>
 
 <script>
 const API_KEY = '${API_KEY}';
 const MODEL = '${MODEL}';
 const SYSTEM_PROMPT = \`${escapeForJs(SYSTEM_PROMPT)}\`;
-const inputText = \`${escapeForJs(inputText.trim())}\`;
+const originalText = \`${escapeForJs(inputText.trim())}\`;
 
-document.getElementById('originalText').textContent = inputText;
-
-const cards = [
+const tabs = [
   { icon: '📝', title: '简洁精炼版', color: '#22c55e' },
   { icon: '💼', title: '专业增强版', color: '#3b82f6' },
   { icon: '💬', title: '口语自然版', color: '#f59e0b' }
 ];
 
+let versions = [];
+let currentTab = 0;
+
+// ========== 差异对比算法 (词级别 LCS) ==========
+function computeDiff(oldText, newText) {
+  // 分词：中文按字，英文按单词
+  const tokenize = (text) => {
+    const tokens = [];
+    let i = 0;
+    while (i < text.length) {
+      const char = text[i];
+      if (/[a-zA-Z]/.test(char)) {
+        // 英文单词
+        let word = '';
+        while (i < text.length && /[a-zA-Z]/.test(text[i])) {
+          word += text[i++];
+        }
+        tokens.push(word);
+      } else if (/\\s/.test(char)) {
+        // 空白符
+        tokens.push(char);
+        i++;
+      } else {
+        // 中文字符或标点
+        tokens.push(char);
+        i++;
+      }
+    }
+    return tokens;
+  };
+  
+  const oldTokens = tokenize(oldText);
+  const newTokens = tokenize(newText);
+  
+  // 计算 LCS（最长公共子序列）
+  const m = oldTokens.length, n = newTokens.length;
+  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+  
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (oldTokens[i-1] === newTokens[j-1]) {
+        dp[i][j] = dp[i-1][j-1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+      }
+    }
+  }
+  
+  // 回溯找出 LCS
+  const lcsSet = new Set();
+  let i = m, j = n;
+  const lcsPositionsOld = new Set();
+  const lcsPositionsNew = new Set();
+  
+  while (i > 0 && j > 0) {
+    if (oldTokens[i-1] === newTokens[j-1]) {
+      lcsPositionsOld.add(i-1);
+      lcsPositionsNew.add(j-1);
+      i--; j--;
+    } else if (dp[i-1][j] > dp[i][j-1]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+  
+  // 生成带标记的 HTML
+  let originalHtml = '';
+  for (let k = 0; k < oldTokens.length; k++) {
+    const token = escapeHtml(oldTokens[k]);
+    if (lcsPositionsOld.has(k)) {
+      originalHtml += token;
+    } else {
+      originalHtml += '<span class="diff-del">' + token + '</span>';
+    }
+  }
+  
+  let optimizedHtml = '';
+  for (let k = 0; k < newTokens.length; k++) {
+    const token = escapeHtml(newTokens[k]);
+    if (lcsPositionsNew.has(k)) {
+      optimizedHtml += token;
+    } else {
+      optimizedHtml += '<span class="diff-add">' + token + '</span>';
+    }
+  }
+  
+  return { 
+    original: originalHtml.replace(/\\n/g, '<br>'), 
+    optimized: optimizedHtml.replace(/\\n/g, '<br>') 
+  };
+}
+
 function escapeHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\n/g,'<br>');
 }
 
-function copyText(text, btn) {
+function countChars(text) {
+  // 只统计中文字符和英文单词
+  const chinese = (text.match(/[\\u4e00-\\u9fa5]/g) || []).length;
+  const english = (text.match(/[a-zA-Z]+/g) || []).length;
+  return chinese + english;
+}
+
+// ========== UI 更新 ==========
+function renderTabs() {
+  const tabsEl = document.getElementById('tabs');
+  tabsEl.innerHTML = '';
+  
+  tabs.forEach((tab, index) => {
+    const div = document.createElement('div');
+    div.className = 'tab' + (index === currentTab ? ' active' : '');
+    div.innerHTML = tab.icon + ' ' + tab.title;
+    div.onclick = () => switchTab(index);
+    tabsEl.appendChild(div);
+  });
+}
+
+function switchTab(index) {
+  currentTab = index;
+  renderTabs();
+  updateCompareView();
+}
+
+function updateCompareView() {
+  const version = versions[currentTab];
+  if (!version) return;
+  
+  const originalCount = countChars(originalText);
+  const optimizedCount = countChars(version);
+  const change = ((optimizedCount - originalCount) / originalCount * 100).toFixed(0);
+  const changeClass = change < 0 ? 'decrease' : 'increase';
+  const changeText = change < 0 ? change + '%' : '+' + change + '%';
+  
+  document.getElementById('originalStats').textContent = originalCount + ' 字';
+  document.getElementById('optimizedStats').innerHTML = 
+    optimizedCount + ' 字<span class="change ' + changeClass + '">' + changeText + '</span>';
+  
+  document.getElementById('optimizedTitle').textContent = tabs[currentTab].icon + ' ' + tabs[currentTab].title;
+  
+  // 计算差异
+  const diff = computeDiff(originalText, version);
+  document.getElementById('originalContent').innerHTML = diff.original;
+  document.getElementById('optimizedContent').innerHTML = diff.optimized;
+  
+  // 重置复制按钮
+  const copyBtn = document.getElementById('copyBtn');
+  copyBtn.textContent = '复制';
+  copyBtn.classList.remove('copied');
+}
+
+function copyCurrentVersion() {
+  const text = versions[currentTab];
   if (typeof utools !== 'undefined') {
     utools.copyText(text);
-    utools.showNotification('已复制');
+    utools.showNotification('已复制: ' + tabs[currentTab].title);
   }
+  const btn = document.getElementById('copyBtn');
   btn.textContent = '已复制';
-  btn.style.background = '#22c55e';
-  setTimeout(() => { btn.textContent = '复制'; btn.style.background = cards[0].color; }, 1500);
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('copied'); }, 1500);
 }
 
 function showResults(items) {
+  versions = items;
   document.getElementById('loading').style.display = 'none';
-  const container = document.getElementById('results');
-  container.style.display = 'block';
-  
-  items.forEach((text, i) => {
-    const c = cards[i] || { icon: '✨', title: '版本'+(i+1), color: '#8b5cf6' };
-    const div = document.createElement('div');
-    div.style.cssText = 'background:#fff;border:1px solid #ddd;border-radius:8px;margin-bottom:12px;overflow:hidden;';
-    
-    const header = document.createElement('div');
-    header.style.cssText = 'display:flex;align-items:center;padding:8px 12px;background:#f5f5f5;border-bottom:1px solid #eee;';
-    header.innerHTML = '<span style="margin-right:6px;">' + c.icon + '</span><b style="color:#333;font-size:13px;">' + c.title + '</b>';
-    
-    const btn = document.createElement('button');
-    btn.textContent = '复制';
-    btn.style.cssText = 'margin-left:auto;background:' + c.color + ';color:#fff;border:none;padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer;';
-    btn.onclick = function() { copyText(text, this); };
-    header.appendChild(btn);
-    
-    const content = document.createElement('div');
-    content.style.cssText = 'padding:12px;font-size:14px;line-height:1.7;color:#333;';
-    content.innerHTML = escapeHtml(text);
-    
-    div.appendChild(header);
-    div.appendChild(content);
-    container.appendChild(div);
-  });
+  document.getElementById('results').style.display = 'block';
+  renderTabs();
+  updateCompareView();
 }
 
 function showError(msg) {
@@ -141,7 +380,7 @@ function showError(msg) {
   document.getElementById('error').textContent = '❌ ' + msg;
 }
 
-// 发起请求
+// ========== 发起请求 ==========
 fetch('https://aihub.gz4399.com/v1/chat/completions', {
   method: 'POST',
   headers: {
@@ -152,7 +391,7 @@ fetch('https://aihub.gz4399.com/v1/chat/completions', {
     model: MODEL,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: inputText }
+      { role: 'user', content: originalText }
     ],
     temperature: 0.8
   })
@@ -175,3 +414,4 @@ fetch('https://aihub.gz4399.com/v1/chat/completions', {
 `
   console.log(html)
 }
+
