@@ -1,10 +1,42 @@
 // =====================================================
-// 话题命名大师 - 自动给文本加上契合的 emoji
+// 话题命名大师 - 自动给文本加上契合的 emoji + 盘古之白
 // 新建命令时：环境选 quickcommand，输出选【忽略输出并隐藏】
 // =====================================================
 
 const API_KEY = 'b1441603-5123-4fd1-909e-4d5cd5e3d122'
 const MODEL = 'gpt-4.1-mini'
+
+// ========== 盘古之白 ==========
+const CJK = '\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff'
+const SYMBOLS = '#@%&+$~`'
+
+const regexCjkAlpha = new RegExp(`([${CJK}])([A-Za-z])`, 'g')
+const regexAlphaCjk = new RegExp(`([A-Za-z])([${CJK}])`, 'g')
+const regexCjkDigit = new RegExp(`([${CJK}])([0-9])`, 'g')
+const regexDigitCjk = new RegExp(`([0-9])([${CJK}])`, 'g')
+const regexCjkSymbol = new RegExp(`([${CJK}])([${SYMBOLS}])`, 'g')
+const regexSymbolCjk = new RegExp(`([${SYMBOLS}])([${CJK}])`, 'g')
+const regexCjkLeftBracket = new RegExp(`([${CJK}])([\\(\\[\\{])`, 'g')
+const regexRightBracketCjk = new RegExp(`([\\)\\]\\}])([${CJK}])`, 'g')
+
+function spacingText(text) {
+  if (!text) return text
+  return text
+    .replace(regexCjkAlpha, '$1 $2')
+    .replace(regexAlphaCjk, '$1 $2')
+    .replace(regexCjkDigit, '$1 $2')
+    .replace(regexDigitCjk, '$1 $2')
+    .replace(regexCjkSymbol, '$1 $2')
+    .replace(regexSymbolCjk, '$1 $2')
+    .replace(regexCjkLeftBracket, '$1 $2')
+    .replace(regexRightBracketCjk, '$1 $2')
+}
+
+// ========== 退出函数 ==========
+function exitPlugin() {
+  utools.hideMainWindow()
+  utools.outPlugin()
+}
 
 const SYSTEM_PROMPT = `你是一个话题emoji大师，我给你一段文本，你自动增加一个契合文本内容的emoji。
 
@@ -24,8 +56,8 @@ const SYSTEM_PROMPT = `你是一个话题emoji大师，我给你一段文本，�
 const inputText = quickcommand.enterData?.payload || ''
 
 if (!inputText.trim()) {
-  quickcommand.showMessageBox('请输入或选中文本', 'error')
-  utools.hideMainWindow()
+  utools.showNotification('请输入或选中文本')
+  exitPlugin()
 } else {
   // 显示加载提示
   quickcommand.showMessageBox('正在请求 AI...', 'info')
@@ -56,14 +88,15 @@ if (!inputText.trim()) {
     res.on('data', chunk => { data += chunk })
     res.on('end', () => {
       if (res.statusCode !== 200) {
-        quickcommand.showMessageBox(`请求失败 [${res.statusCode}]`, 'error')
-        utools.hideMainWindow()
+        utools.showNotification(`请求失败 [${res.statusCode}]`)
+        exitPlugin()
         return
       }
       try {
         const json = JSON.parse(data)
         const content = json.choices[0].message.content.trim()
-        const items = content.split('|||').map(s => s.trim()).filter(s => s)
+        // 解析结果并应用盘古之白
+        const items = content.split('|||').map(s => spacingText(s.trim())).filter(s => s)
         
         if (items.length > 0) {
           // 显示选择列表
@@ -85,22 +118,22 @@ if (!inputText.trim()) {
               utools.copyText(textToCopy)
               utools.showNotification(`已复制: ${textToCopy}`)
             }
-            utools.hideMainWindow()
+            exitPlugin()
           })
         } else {
-          quickcommand.showMessageBox('未获取到结果', 'error')
-          utools.hideMainWindow()
+          utools.showNotification('未获取到结果')
+          exitPlugin()
         }
       } catch (e) {
-        quickcommand.showMessageBox(`解析失败: ${e.message}`, 'error')
-        utools.hideMainWindow()
+        utools.showNotification(`解析失败: ${e.message}`)
+        exitPlugin()
       }
     })
   })
 
   req.on('error', (e) => {
-    quickcommand.showMessageBox(`网络错误: ${e.message}`, 'error')
-    utools.hideMainWindow()
+    utools.showNotification(`网络错误: ${e.message}`)
+    exitPlugin()
   })
   req.write(postData)
   req.end()
