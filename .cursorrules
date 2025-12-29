@@ -1,0 +1,312 @@
+# uTools 快捷命令开发规范
+
+本项目包含 uTools 快捷命令插件脚本，环境选择 `quickcommand`。
+
+---
+
+## 📁 文件结构规范
+
+### 文件头部注释（必须）
+```javascript
+// =====================================================
+// 脚本名称 - 功能描述
+// 新建命令时：环境选 quickcommand，输出选【输出类型】
+// =====================================================
+```
+
+### 输出类型选择
+| 类型 | 适用场景 | 示例 |
+|------|----------|------|
+| `忽略输出并隐藏` | 简单处理、列表选择 | pangu_spacing.js, topic_emoji_master.js |
+| `忽略输出且不隐藏` | 需要保持界面的操作 | cursor_recent_projects.js |
+| `显示html` | 复杂 UI 展示 | content_optimizer.js |
+
+---
+
+## 🚪 退出方式规范
+
+### 1. 简单处理型（无交互列表）
+直接隐藏窗口：
+```javascript
+utools.hideMainWindow()
+```
+
+### 2. 列表选择型（有 showSelectList）⚠️ 重要
+**必须使用组合退出**，否则再次打开会白屏：
+```javascript
+function exitPlugin() {
+  utools.hideMainWindow()  // 隐藏窗口（不留搜索框）
+  utools.outPlugin()       // 退出插件（防止白屏）
+}
+```
+
+### 3. 需要保持搜索框
+只退出插件：
+```javascript
+utools.outPlugin()
+```
+
+---
+
+## 📥 输入获取规范
+
+### 从关键词输入获取
+```javascript
+const inputText = quickcommand.enterData?.payload || ''
+```
+
+### 从剪贴板获取
+```javascript
+const clipText = utools.getClipboardText?.() || ''
+```
+
+### 组合获取（优先剪贴板）
+```javascript
+const clipText = utools.getClipboardText?.() || ''
+const inputText = clipText || quickcommand.enterData?.payload || ''
+```
+
+---
+
+## 💬 消息提示规范
+
+### 进行中/错误提示（插件窗口内）
+```javascript
+quickcommand.showMessageBox('正在处理...', 'info')
+quickcommand.showMessageBox('发生错误', 'error')
+```
+
+### 完成通知（右下角系统通知）
+```javascript
+utools.showNotification('✅ 操作完成')
+```
+
+---
+
+## 📋 列表选择规范
+
+### 简单字符串数组
+```javascript
+quickcommand.showSelectList(['选项1', '选项2', '选项3']).then(selected => {
+  // selected 可能是 string、number 或 object
+})
+```
+
+### 对象数组（带描述）
+```javascript
+const items = [
+  { title: '标题1', description: '描述1', idx: 0 },
+  { title: '标题2', description: '描述2', idx: 1 }
+]
+quickcommand.showSelectList(items, {
+  placeholder: '搜索提示',
+  optionType: 'json'
+}).then(selected => {
+  // 使用 selected.idx 获取索引
+})
+```
+
+### 返回值兼容处理（必须）
+```javascript
+quickcommand.showSelectList(items).then(selected => {
+  if (selected === undefined || selected === null) return
+  
+  let result = ''
+  if (typeof selected === 'number') {
+    result = items[selected]
+  } else if (typeof selected === 'string') {
+    result = selected
+  } else if (selected.title) {
+    result = selected.title
+  } else if (selected.id !== undefined) {
+    result = items[selected.id]
+  } else if (selected.idx !== undefined) {
+    result = items[selected.idx]
+  } else {
+    result = String(selected)
+  }
+  
+  // 处理 result...
+})
+```
+
+---
+
+## 💾 数据存储规范
+
+### 持久化存储（必须 try-catch）
+```javascript
+const STORAGE_KEY = 'my_data_key'
+
+function getData() {
+  try {
+    return utools.dbStorage.getItem(STORAGE_KEY) || {}
+  } catch (e) {
+    return {}
+  }
+}
+
+function setData(data) {
+  try {
+    utools.dbStorage.setItem(STORAGE_KEY, data)
+  } catch (e) {}
+}
+```
+
+---
+
+## 🌐 HTTP 请求规范
+
+### Node.js 环境（快捷命令）
+```javascript
+const https = require('https')
+
+const postData = JSON.stringify({ key: 'value' })
+
+const options = {
+  hostname: 'api.example.com',
+  path: '/endpoint',
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${API_KEY}`,
+    'Content-Length': Buffer.byteLength(postData)
+  }
+}
+
+const req = https.request(options, (res) => {
+  let data = ''
+  res.on('data', chunk => { data += chunk })
+  res.on('end', () => {
+    if (res.statusCode !== 200) {
+      utools.showNotification(`请求失败 [${res.statusCode}]`)
+      exitPlugin()
+      return
+    }
+    try {
+      const json = JSON.parse(data)
+      // 处理响应...
+    } catch (e) {
+      utools.showNotification(`解析失败: ${e.message}`)
+      exitPlugin()
+    }
+  })
+})
+
+req.on('error', (e) => {
+  utools.showNotification(`网络错误: ${e.message}`)
+  exitPlugin()
+})
+req.write(postData)
+req.end()
+```
+
+### HTML 输出环境（浏览器 fetch）
+```javascript
+fetch('https://api.example.com/endpoint', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + API_KEY
+  },
+  body: JSON.stringify({ key: 'value' })
+})
+.then(res => {
+  if (!res.ok) throw new Error('请求失败 [' + res.status + ']')
+  return res.json()
+})
+.then(data => {
+  // 处理响应...
+})
+.catch(err => showError(err.message))
+```
+
+---
+
+## 📦 常用 Node.js 模块
+
+```javascript
+const fs = require('fs')           // 文件系统
+const path = require('path')       // 路径处理
+const os = require('os')           // 系统信息
+const https = require('https')     // HTTPS 请求
+const { exec } = require('child_process')  // 执行命令
+```
+
+---
+
+## ✅ 完整模板示例
+
+### 简单处理型
+```javascript
+// =====================================================
+// 脚本名称 - 功能描述
+// 新建命令时：环境选 quickcommand，输出选【忽略输出并隐藏】
+// =====================================================
+
+const inputText = quickcommand.enterData?.payload || ''
+
+if (!inputText.trim()) {
+  utools.showNotification('请输入或选中文本')
+} else {
+  const result = processText(inputText)
+  utools.copyText(result)
+  utools.showNotification('✅ 已复制')
+}
+
+utools.hideMainWindow()
+```
+
+### 列表选择型
+```javascript
+// =====================================================
+// 脚本名称 - 功能描述
+// 新建命令时：环境选 quickcommand，输出选【忽略输出并隐藏】
+// =====================================================
+
+function exitPlugin() {
+  utools.hideMainWindow()
+  utools.outPlugin()
+}
+
+const inputText = quickcommand.enterData?.payload || ''
+
+if (!inputText.trim()) {
+  utools.showNotification('请输入或选中文本')
+  exitPlugin()
+} else {
+  quickcommand.showMessageBox('正在处理...', 'info')
+  
+  // 异步获取数据...
+  const items = ['选项1', '选项2', '选项3']
+  
+  quickcommand.showSelectList(items).then(selected => {
+    if (selected !== undefined && selected !== null) {
+      const result = typeof selected === 'string' ? selected : items[selected.id || selected]
+      utools.copyText(result)
+      utools.showNotification(`已复制: ${result}`)
+    }
+    exitPlugin()
+  })
+}
+```
+
+---
+
+## ⚠️ 常见问题
+
+### 1. 再次打开白屏
+**原因**：使用了 `showSelectList` 但只调用 `hideMainWindow()`
+**解决**：使用 `exitPlugin()` 组合退出
+
+### 2. 搜索框没关掉
+**原因**：只调用了 `outPlugin()` 没有 `hideMainWindow()`
+**解决**：先 `hideMainWindow()` 再 `outPlugin()`
+
+### 3. dbStorage 报错
+**原因**：某些环境下 API 不可用
+**解决**：必须用 try-catch 包裹
+
+### 4. showSelectList 返回值不一致
+**原因**：不同情况返回格式不同
+**解决**：使用兼容处理代码（见上文）
